@@ -1,0 +1,7 @@
+MANIFEST
+Makefile.PL
+Algorithm/Diff.pm
+diff.pl
+cdiff.pl
+README
+t/none.t
