@@ -1,11 +1,13 @@
 package Algorithm::Diff;
 use strict;
 use vars qw($VERSION @EXPORT_OK @ISA @EXPORT);
+use integer;		# see below in _replaceNextLargerWith() for mod to make
+					# if you don't use this
 require Exporter;
 @ISA = qw(Exporter);
 @EXPORT = qw();
 @EXPORT_OK = qw(LCS diff traverse_sequences);
-$VERSION = sprintf('%d.%02d', (q$Revision: 1.6 $ =~ /\d+/g));
+$VERSION = sprintf('%d.%02d', (q$Revision: 1.10 $ =~ /\d+/g));
 
 # McIlroy-Hunt diff algorithm
 # Adapted from the Smalltalk code of Mario I. Wolczko, <mario@wolczko.com>
@@ -370,9 +372,8 @@ sub _withPositionsOfInInterval
 
 sub _replaceNextLargerWith
 {
-	my $array = shift;	# array ref
-	my $aValue = shift;	# numeric
-	my $high = $#$array;
+	my ( $array, $aValue, $high ) = @_;
+	$high ||= $#$array;
 
 	# off the end?
 	if ( $high == -1 || $aValue > $array->[ -1 ] )
@@ -384,10 +385,18 @@ sub _replaceNextLargerWith
 	# binary search for insertion point...
 	my $low = 0;
 	my $index;
+	my $found;
 	while ( $low <= $high )
 	{
 		$index = ( $high + $low ) / 2;
-		if ( $aValue > $array->[ $index ] )
+#		$index = int(( $high + $low ) / 2);		# without 'use integer'
+		$found = $array->[ $index ];
+
+		if ( $aValue == $found )
+		{
+			return undef;
+		}
+		elsif ( $aValue > $found )
 		{
 			$low = $index + 1;
 		}
@@ -396,9 +405,8 @@ sub _replaceNextLargerWith
 			$high = $index - 1;
 		}
 	}
-	# now insertion point is in $low.
-	return undef if $array->[ $low ] == $aValue;	# same?
 
+	# now insertion point is in $low.
 	$array->[ $low ] = $aValue;		# overwrite next larger
 	return $low;
 }
@@ -424,20 +432,32 @@ sub _longestCommonSubsequence
 {
 	my $a = shift;	# array ref
 	my $b = shift;	# array ref
-	my $keyGen = shift || sub { $_[0] };
-	my $compare = sub { &$keyGen( $_[0], @_ ) eq &$keyGen( $_[1], @_ ) };
+	my $keyGen = shift;	# code ref
+	my $compare;	# code ref
 
-	my( $aStart, $aFinish, $bStart, $bFinish ) = ( 0, $#$a, 0, $#$b );
-	my $matchVector = [];
+	# set up code refs
+	# Note that these are optimized.
+	if ( !defined( $keyGen ) )	# optimize for strings
+	{
+		$keyGen = sub { $_[0] };
+		$compare = sub { my ($a, $b) = @_; $a eq $b };
+	}
+	else
+	{
+		$compare = sub {
+			my $a = shift; my $b = shift;
+			&$keyGen( $a, @_ ) eq &$keyGen( $b, @_ )
+		};
+	}
+
+	my ($aStart, $aFinish, $bStart, $bFinish, $matchVector) = (0, $#$a, 0, $#$b, []);
 
 	# First we prune off any common elements at the beginning
 	while ( $aStart <= $aFinish
 		and $bStart <= $bFinish
 		and &$compare( $a->[ $aStart ], $b->[ $bStart ], @_ ) )
 	{
-		$matchVector->[ $aStart ] = $bStart;
-		$aStart++;
-		$bStart++;
+		$matchVector->[ $aStart++ ] = $bStart++;
 	}
 
 	# now the end
@@ -445,14 +465,11 @@ sub _longestCommonSubsequence
 		and $bStart <= $bFinish
 		and &$compare( $a->[ $aFinish ], $b->[ $bFinish ], @_ ) )
 	{
-		$matchVector->[ $aFinish ] = $bFinish;
-		$aFinish--;
-		$bFinish--;
+		$matchVector->[ $aFinish-- ] = $bFinish--;
 	}
 
 	# Now compute the equivalence classes of positions of elements
-	my $bMatches = _withPositionsOfInInterval( $b, $bStart, $bFinish,
-		$keyGen, @_ );
+	my $bMatches = _withPositionsOfInInterval( $b, $bStart, $bFinish, $keyGen, @_ );
 	my $thresh = [];
 	my $links = [];
 
@@ -470,12 +487,13 @@ sub _longestCommonSubsequence
 					and $thresh->[ $k ] > $j
 					and $thresh->[ $k - 1 ] < $j )
 				{
-					$thresh->[ $k ] = $j
+					$thresh->[ $k ] = $j;
 				}
 				else
 				{
-					$k = _replaceNextLargerWith( $thresh, $j )
+					$k = _replaceNextLargerWith( $thresh, $j, $k );
 				}
+
 				# oddly, it's faster to always test this (CPU cache?).
 				if ( defined( $k ) )
 				{
@@ -502,13 +520,11 @@ sub traverse_sequences
 	my $a = shift;	# array ref
 	my $b = shift;	# array ref
 	my $callbacks = shift || { };
-	my $compare = shift;
 	my $keyGen = shift;
 	my $matchCallback = $callbacks->{'MATCH'} || sub { };
 	my $discardACallback = $callbacks->{'DISCARD_A'} || sub { };
 	my $discardBCallback = $callbacks->{'DISCARD_B'} || sub { };
-	my $matchVector = _longestCommonSubsequence( $a, $b,
-		$compare, $keyGen, @_ );
+	my $matchVector = _longestCommonSubsequence( $a, $b, $keyGen, @_ );
 	# Process all the lines in match vector
 	my $lastA = $#$a;
 	my $lastB = $#$b;
@@ -520,8 +536,7 @@ sub traverse_sequences
 		if ( defined( $bLine ) )
 		{
 			&$discardBCallback( $ai, $bi++, @_ ) while $bi < $bLine;
-			&$matchCallback( $ai, $bi, @_ );
-			$bi++;
+			&$matchCallback( $ai, $bi++, @_ );
 		}
 		else
 		{
