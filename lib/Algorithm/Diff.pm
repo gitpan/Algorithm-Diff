@@ -7,7 +7,7 @@ require Exporter;
 @ISA = qw(Exporter);
 @EXPORT = qw();
 @EXPORT_OK = qw(LCS diff traverse_sequences);
-$VERSION = sprintf('%d.%02d', (q$Revision: 1.10 $ =~ /\d+/g));
+$VERSION = sprintf('%d.%02d', (q$Revision: 1.11 $ =~ /\d+/g));
 
 # McIlroy-Hunt diff algorithm
 # Adapted from the Smalltalk code of Mario I. Wolczko, <mario@wolczko.com>
@@ -180,30 +180,27 @@ routine.
 C<traverse_sequences> is the most general facility provided by this
 module; C<diff> and C<LCS> are implemented as calls to it.
 
-Imagine that there are two arrows.  Arrow A points to an element of
-sequence A, and arrow B points to an element of the sequence B.
-Initially, the arrows point to the first elements of the respective
-sequences.  C<traverse_sequences> will advance the arrows through the
-sequences one element at a time, calling an appropriate user-specified
-callback function before each advance.  It willadvance the arrows in
-such a way that if there are equal elements C<$A[$i]> and C<$B[$j]>
-which are equal and which are part of the LCS, there will be some
-moment during the execution of C<traverse_sequences> when arrow A is
-pointing to C<$A[$i]> and arrow B is pointing to C<$B[$j]>.  When this
-happens, C<traverse_sequences> will call the C<MATCH> callback
-function and then it will advance both arrows. 
+Imagine that there are two arrows.  Arrow A points to an element of sequence A,
+and arrow B points to an element of the sequence B.  Initially, the arrows
+point to the first elements of the respective sequences.  C<traverse_sequences>
+will advance the arrows through the sequences one element at a time, calling an
+appropriate user-specified callback function before each advance.  It
+willadvance the arrows in such a way that if there are equal elements C<$A[$i]>
+and C<$B[$j]> which are equal and which are part of the LCS, there will be
+some moment during the execution of C<traverse_sequences> when arrow A is
+pointing to C<$A[$i]> and arrow B is pointing to C<$B[$j]>.  When this happens,
+C<traverse_sequences> will call the C<MATCH> callback function and then it will
+advance both arrows. 
 
-Otherwise, one of the arrows is pointing to an element of its sequence
-that is not part of the LCS.  C<traverse_sequences> will advance that
-arrow and will call the C<DISCARD_A> or the C<DISCARD_B> callback,
-depending on which arrow it advanced.  If both arrows point to
-elements that are not part of the LCS, then C<traverse_sequences> will
-advance one of them and call the appropriate callback, but it is not
-specified which it will call.
+Otherwise, one of the arrows is pointing to an element of its sequence that is
+not part of the LCS.  C<traverse_sequences> will advance that arrow and will
+call the C<DISCARD_A> or the C<DISCARD_B> callback, depending on which arrow it
+advanced.  If both arrows point to elements that are not part of the LCS, then
+C<traverse_sequences> will advance one of them and call the appropriate
+callback, but it is not specified which it will call.
 
-The arguments to C<traverse_sequences> are the two sequences to
-traverse, and a callback which specifies the callback functions, like
-this:
+The arguments to C<traverse_sequences> are the two sequences to traverse, and a
+callback which specifies the callback functions, like this:
 
   traverse_sequences( \@seq1, \@seq2,
                      { MATCH => $callback_1,
@@ -211,43 +208,41 @@ this:
                        DISCARD_B => $callback_3,
                      } );
 
-Callbacks are invoked with at least the indices of the two arrows as
-their arguments.  They are not expected to return any values.  If a
-callback is omitted from the table, it is not called.
+Callbacks for MATCH, DISCARD_A, and DISCARD_B are invoked with at least the
+indices of the two arrows as their arguments.  They are not expected to return
+any values.  If a callback is omitted from the table, it is not called.
+
+Callbacks for A_FINISHED and B_FINISHED are invoked with at least the
+corresponding index in A or B,
 
 If arrow A reaches the end of its sequence, before arrow B does,
-C<traverse_sequences> will call the C<A_FINISHED> callback when it
-advances arrow B, if there is such a function; if not it will call
-C<DISCARD_B> instead.  Similarly if arrow B finishes first.
-C<traverse_sequences> returns when both arrows are at the ends of
-their respective sequences.  It returns true on success and false on
-failure.  At present there is no way to fail.
+C<traverse_sequences> will call the C<A_FINISHED> callback when it advances
+arrow B, if there is such a function; if not it will call C<DISCARD_B> instead.
+Similarly if arrow B finishes first.  C<traverse_sequences> returns when both
+arrows are at the ends of their respective sequences.  It returns true on
+success and false on failure.  At present there is no way to fail.
 
-C<traverse_sequences> may be passed an optional fourth parameter; this
-is a CODE reference to a key generation function.  See L</KEY
-GENERATION FUNCTIONS>.
+C<traverse_sequences> may be passed an optional fourth parameter; this is a
+CODE reference to a key generation function.  See L</KEY GENERATION FUNCTIONS>.
 
-Additional parameters, if any, will be passed to the key generation
-function.
+Additional parameters, if any, will be passed to the key generation function.
 
 =head1 KEY GENERATION FUNCTIONS
 
 C<diff>, C<LCS>, and C<traverse_sequences> accept an optional last parameter.
 This is a CODE reference to a key generating (hashing) function that should
-return a string that uniquely identifies a given element.
-It should be the case that if two elements are to be considered equal,
-their keys should be the same (and the other way around).
-If no key generation function is provided, the key will be the
-element as a string.
+return a string that uniquely identifies a given element.  It should be the
+case that if two elements are to be considered equal, their keys should be the
+same (and the other way around).  If no key generation function is provided,
+the key will be the element as a string.
 
 By default, comparisons will use "eq" and elements will be turned into keys
 using the default stringizing operator '""'.
 
-Where this is important is when you're comparing something other than
-strings. If it is the case that you have multiple different objects 
-that should be considered to be equal, you should supply a key
-generation function. Otherwise, you have to make sure that your arrays
-contain unique references.
+Where this is important is when you're comparing something other than strings.
+If it is the case that you have multiple different objects that should be
+considered to be equal, you should supply a key generation function. Otherwise,
+you have to make sure that your arrays contain unique references.
 
 For instance, consider this example:
 
@@ -414,8 +409,8 @@ sub _replaceNextLargerWith
 # This method computes the longest common subsequence in $a and $b.
 
 # Result is array or ref, whose contents is such that
-# 	$a->[ $i ] = $b->[ $result[ $i ] ]
-# foreach $i in ( 0..scalar( @result ) if $result[ $i ] is defined.
+# 	$a->[ $i ] == $b->[ $result[ $i ] ]
+# foreach $i in ( 0 .. $#result ) if $result[ $i ] is defined.
 
 # An additional argument may be passed; this is a hash or key generating
 # function that should return a string that uniquely identifies the given
@@ -476,7 +471,7 @@ sub _longestCommonSubsequence
 	my ( $i, $ai, $j, $k );
 	for ( $i = $aStart; $i <= $aFinish; $i++ )
 	{
-		$ai = &$keyGen( $a->[ $i ] );
+		$ai = &$keyGen( $a->[ $i ], @_ );
 		if ( exists( $bMatches->{ $ai } ) )
 		{
 			$k = 0;
@@ -523,17 +518,20 @@ sub traverse_sequences
 	my $keyGen = shift;
 	my $matchCallback = $callbacks->{'MATCH'} || sub { };
 	my $discardACallback = $callbacks->{'DISCARD_A'} || sub { };
+	my $finishedACallback = $callbacks->{'A_FINISHED'};
 	my $discardBCallback = $callbacks->{'DISCARD_B'} || sub { };
+	my $finishedBCallback = $callbacks->{'B_FINISHED'};
 	my $matchVector = _longestCommonSubsequence( $a, $b, $keyGen, @_ );
 	# Process all the lines in match vector
 	my $lastA = $#$a;
 	my $lastB = $#$b;
 	my $bi = 0;
 	my $ai;
+
 	for ( $ai = 0; $ai <= $#$matchVector; $ai++ )
 	{
 		my $bLine = $matchVector->[ $ai ];
-		if ( defined( $bLine ) )
+		if ( defined( $bLine ) )	# matched
 		{
 			&$discardBCallback( $ai, $bi++, @_ ) while $bi < $bLine;
 			&$matchCallback( $ai, $bi++, @_ );
@@ -543,9 +541,25 @@ sub traverse_sequences
 			&$discardACallback( $ai, $bi, @_ );
 		}
 	}
+	# the last entry (if any) processed was a match.
 
-	&$discardACallback( $ai++, $bi, @_ ) while ( $ai <= $lastA );
-	&$discardBCallback( $ai, $bi++, @_ ) while ( $bi <= $lastB );
+	if ( defined( $finishedBCallback ) && $ai <= $lastA )
+	{
+		&$finishedBCallback( $bi, @_ );
+	}
+	else
+	{
+		&$discardACallback( $ai++, $bi, @_ ) while ( $ai <= $lastA );
+	}
+
+	if ( defined( $finishedACallback ) && $bi <= $lastB )
+	{
+		&$finishedACallback( $ai, @_ );
+	}
+	else
+	{
+		&$discardBCallback( $ai, $bi++, @_ ) while ( $bi <= $lastB );
+	}
 	return 1;
 }
 
