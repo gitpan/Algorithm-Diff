@@ -1,13 +1,13 @@
 package Algorithm::Diff;
 use strict;
 use vars qw($VERSION @EXPORT_OK @ISA @EXPORT);
-use integer;		# see below in _replaceNextLargerWith() for mod to make
-					# if you don't use this
+use integer;    # see below in _replaceNextLargerWith() for mod to make
+                # if you don't use this
 require Exporter;
-@ISA = qw(Exporter);
-@EXPORT = qw();
-@EXPORT_OK = qw(LCS diff traverse_sequences);
-$VERSION = sprintf('%d.%02d', (q$Revision: 1.11 $ =~ /\d+/g));
+@ISA       = qw(Exporter);
+@EXPORT    = qw();
+@EXPORT_OK = qw(LCS diff traverse_sequences traverse_balanced sdiff);
+$VERSION = sprintf('%d.%02d', (q$Revision: 1.15 $ =~ /\d+/g));
 
 # McIlroy-Hunt diff algorithm
 # Adapted from the Smalltalk code of Mario I. Wolczko, <mario@wolczko.com>
@@ -19,7 +19,8 @@ Algorithm::Diff - Compute `intelligent' differences between two files / lists
 
 =head1 SYNOPSIS
 
-  use Algorithm::Diff qw(diff LCS traverse_sequences);
+  use Algorithm::Diff qw(diff sdiff LCS traverse_sequences
+                         traverse_balanced);
 
   @lcs    = LCS( \@seq1, \@seq2 );
 
@@ -32,6 +33,10 @@ Algorithm::Diff - Compute `intelligent' differences between two files / lists
   @diffs = diff( \@seq1, \@seq2 );
 
   @diffs = diff( \@seq1, \@seq2, $key_generation_function );
+
+  @sdiffs = sdiff( \@seq1, \@seq2 );
+
+  @sdiffs = sdiff( \@seq1, \@seq2, $key_generation_function );
   
   traverse_sequences( \@seq1, \@seq2,
                      { MATCH => $callback,
@@ -45,6 +50,13 @@ Algorithm::Diff - Compute `intelligent' differences between two files / lists
                        DISCARD_B => $callback,
                      },
                      $key_generation_function );
+
+  traverse_balanced( \@seq1, \@seq2,
+                     { MATCH => $callback,
+                       DISCARD_A => $callback,
+                       DISCARD_B => $callback,
+                       CHANGE    => $callback,
+                     } );
 
 =head1 INTRODUCTION
 
@@ -102,8 +114,8 @@ is C<a x b y c z>:
 =head1 USAGE
 
 This module provides three exportable functions, which we'll deal with in
-ascending order of difficulty: C<LCS>, C<diff>, and
-C<traverse_sequences>.
+ascending order of difficulty: C<LCS>, 
+C<diff>, C<sdiff>, C<traverse_sequences>, and C<traverse_balanced>.
 
 =head2 C<LCS>
 
@@ -175,6 +187,57 @@ FUNCTIONS>.
 Additional parameters, if any, will be passed to the key generation
 routine.
 
+=head2 C<sdiff>
+
+  @sdiffs     = sdiff( \@seq1, \@seq2 );
+  $sdiffs_ref = sdiff( \@seq1, \@seq2 );
+
+C<sdiff> computes all necessary components to show two sequences
+and their minimized differences side by side, just like the 
+Unix-utility I<sdiff> does:
+
+    same             same
+    before     |     after
+    old        <     -
+    -          >     new
+
+It returns a list of array refs, each pointing to an array of 
+display instructions. In scalar context it returns a reference
+to such a list.
+
+Display instructions consist of three elements: A modifier indicator
+(C<+>: Element added, C<->: Element removed, C<u>: Element unmodified, 
+C<c>: Element changed) and the value of the old and new elements, to
+be displayed side by side.
+
+An C<sdiff> of the following two sequences:
+
+  a b c e h j l m n p
+  b c d e f j k l m r s t
+
+results in
+
+[ [ '-', 'a', ''  ],
+  [ 'u', 'b', 'b' ],
+  [ 'u', 'c', 'c' ],
+  [ '+', '',  'd' ],
+  [ 'u', 'e', 'e' ],
+  [ 'c', 'h', 'f' ],
+  [ 'u', 'j', 'j' ],
+  [ '+', '',  'k' ],
+  [ 'u', 'l', 'l' ],
+  [ 'u', 'm', 'm' ],
+  [ 'c', 'n', 'r' ],
+  [ 'c', 'p', 's' ],
+  [ '+', '', 't' ] ]
+
+C<sdiff> may be passed an optional third parameter; this is a CODE
+reference to a key generation function.  See L</KEY GENERATION
+FUNCTIONS>.
+
+Additional parameters, if any, will be passed to the key generation
+routine.
+
 =head2 C<traverse_sequences>
 
 C<traverse_sequences> is the most general facility provided by this
@@ -200,7 +263,7 @@ C<traverse_sequences> will advance one of them and call the appropriate
 callback, but it is not specified which it will call.
 
 The arguments to C<traverse_sequences> are the two sequences to traverse, and a
-callback which specifies the callback functions, like this:
+hash which specifies the callback functions, like this:
 
   traverse_sequences( \@seq1, \@seq2,
                      { MATCH => $callback_1,
@@ -213,7 +276,7 @@ indices of the two arrows as their arguments.  They are not expected to return
 any values.  If a callback is omitted from the table, it is not called.
 
 Callbacks for A_FINISHED and B_FINISHED are invoked with at least the
-corresponding index in A or B,
+corresponding index in A or B.
 
 If arrow A reaches the end of its sequence, before arrow B does,
 C<traverse_sequences> will call the C<A_FINISHED> callback when it advances
@@ -226,6 +289,40 @@ C<traverse_sequences> may be passed an optional fourth parameter; this is a
 CODE reference to a key generation function.  See L</KEY GENERATION FUNCTIONS>.
 
 Additional parameters, if any, will be passed to the key generation function.
+
+=head2 C<traverse_balanced>
+
+C<traverse_balanced> is an alternative to C<traverse_sequences>. It
+uses a different algorithm to iterate through the entries in the
+computed LCS. Instead of sticking to one side and showing element changes
+as insertions and deletions only, it will jump back and forth between
+the two sequences and report I<changes> occurring as deletions on one
+side followed immediatly by an insertion on the other side.
+
+In addition to the 
+C<DISCARD_A>,
+C<DISCARD_B>, and
+C<MATCH>
+callbacks supported by C<traverse_sequences>, C<traverse_balanced> supports
+a C<CHANGE> callback indicating that one element got C<replaced> by another:
+
+  traverse_sequences( \@seq1, \@seq2,
+                     { MATCH => $callback_1,
+                       DISCARD_A => $callback_2,
+                       DISCARD_B => $callback_3,
+                       CHANGE    => $callback_4,
+                     } );
+
+If no C<CHANGE> callback is specified, C<traverse_balanced>
+will map C<CHANGE> events to C<DISCARD_A> and C<DISCARD_B> actions,
+therefore resulting in a similar behaviour as C<traverse_sequences>
+with different order of events.
+
+C<traverse_balanced> might be a bit slower than C<traverse_sequences>,
+noticable only while processing huge amounts of data.
+
+The C<sdiff> function of this module 
+is implemented as call to C<traverse_balanced>.
 
 =head1 KEY GENERATION FUNCTIONS
 
@@ -304,6 +401,13 @@ if you wish.
 
 This version by Ned Konz, perl@bike-nomad.com
 
+=head1 LICENSE
+
+Copyright (c) 2000-2002 Ned Konz.  All rights reserved.
+This program is free software;
+you can redistribute it and/or modify it under the same terms
+as Perl itself.
+
 =head1 CREDITS
 
 Versions through 0.59 (and much of this documentation) were written by:
@@ -316,6 +420,9 @@ from Mark-Jason's, but has all new code in Diff.pm.
 This code was adapted from the Smalltalk code of
 Mario Wolczko <mario@wolczko.com>, which is available at
 ftp://st.cs.uiuc.edu/pub/Smalltalk/MANCHESTER/manchester/4.0/diff.st
+
+C<sdiff> and C<traverse_balanced> were written by Mike Schilli
+<m@perlmeister.com>.
 
 The algorithm is that described in 
 I<A Fast Algorithm for Computing Longest Common Subsequences>,
@@ -335,26 +442,26 @@ minor improvements to improve the speed.
 
 sub _withPositionsOfInInterval
 {
-	my $aCollection = shift;	# array ref
-	my $start = shift;
-	my $end = shift;
-	my $keyGen = shift;
+	my $aCollection = shift;    # array ref
+	my $start       = shift;
+	my $end         = shift;
+	my $keyGen      = shift;
 	my %d;
 	my $index;
-	for ( $index = $start; $index <= $end; $index++ )
+	for ( $index = $start ; $index <= $end ; $index++ )
 	{
-		my $element = $aCollection->[ $index ];
+		my $element = $aCollection->[$index];
 		my $key = &$keyGen( $element, @_ );
-		if ( exists( $d{ $key } ) )
+		if ( exists( $d{$key} ) )
 		{
-			push( @{ $d{ $key } }, $index );
+			unshift ( @{ $d{$key} }, $index );
 		}
 		else
 		{
-			$d{ $key } = [ $index ];
+			$d{$key} = [$index];
 		}
 	}
-	return wantarray ? %d: \%d;
+	return wantarray ? %d : \%d;
 }
 
 # Find the place at which aValue would normally be inserted into the array. If
@@ -371,9 +478,9 @@ sub _replaceNextLargerWith
 	$high ||= $#$array;
 
 	# off the end?
-	if ( $high == -1 || $aValue > $array->[ -1 ] )
+	if ( $high == -1 || $aValue > $array->[-1] )
 	{
-		push( @$array, $aValue );
+		push ( @$array, $aValue );
 		return $high + 1;
 	}
 
@@ -384,8 +491,9 @@ sub _replaceNextLargerWith
 	while ( $low <= $high )
 	{
 		$index = ( $high + $low ) / 2;
-#		$index = int(( $high + $low ) / 2);		# without 'use integer'
-		$found = $array->[ $index ];
+
+		#		$index = int(( $high + $low ) / 2);		# without 'use integer'
+		$found = $array->[$index];
 
 		if ( $aValue == $found )
 		{
@@ -402,7 +510,7 @@ sub _replaceNextLargerWith
 	}
 
 	# now insertion point is in $low.
-	$array->[ $low ] = $aValue;		# overwrite next larger
+	$array->[$low] = $aValue;    # overwrite next larger
 	return $low;
 }
 
@@ -425,32 +533,34 @@ sub _replaceNextLargerWith
 
 sub _longestCommonSubsequence
 {
-	my $a = shift;	# array ref
-	my $b = shift;	# array ref
-	my $keyGen = shift;	# code ref
-	my $compare;	# code ref
+	my $a      = shift;    # array ref
+	my $b      = shift;    # array ref
+	my $keyGen = shift;    # code ref
+	my $compare;           # code ref
 
 	# set up code refs
 	# Note that these are optimized.
-	if ( !defined( $keyGen ) )	# optimize for strings
+	if ( !defined($keyGen) )    # optimize for strings
 	{
 		$keyGen = sub { $_[0] };
-		$compare = sub { my ($a, $b) = @_; $a eq $b };
+		$compare = sub { my ( $a, $b ) = @_; $a eq $b };
 	}
 	else
 	{
 		$compare = sub {
-			my $a = shift; my $b = shift;
-			&$keyGen( $a, @_ ) eq &$keyGen( $b, @_ )
+			my $a = shift;
+			my $b = shift;
+			&$keyGen( $a, @_ ) eq &$keyGen( $b, @_ );
 		};
 	}
 
-	my ($aStart, $aFinish, $bStart, $bFinish, $matchVector) = (0, $#$a, 0, $#$b, []);
+	my ( $aStart, $aFinish, $bStart, $bFinish, $matchVector ) =
+	  ( 0, $#$a, 0, $#$b, [] );
 
 	# First we prune off any common elements at the beginning
 	while ( $aStart <= $aFinish
 		and $bStart <= $bFinish
-		and &$compare( $a->[ $aStart ], $b->[ $bStart ], @_ ) )
+		and &$compare( $a->[$aStart], $b->[$bStart], @_ ) )
 	{
 		$matchVector->[ $aStart++ ] = $bStart++;
 	}
@@ -458,31 +568,31 @@ sub _longestCommonSubsequence
 	# now the end
 	while ( $aStart <= $aFinish
 		and $bStart <= $bFinish
-		and &$compare( $a->[ $aFinish ], $b->[ $bFinish ], @_ ) )
+		and &$compare( $a->[$aFinish], $b->[$bFinish], @_ ) )
 	{
 		$matchVector->[ $aFinish-- ] = $bFinish--;
 	}
 
 	# Now compute the equivalence classes of positions of elements
-	my $bMatches = _withPositionsOfInInterval( $b, $bStart, $bFinish, $keyGen, @_ );
+	my $bMatches =
+	  _withPositionsOfInInterval( $b, $bStart, $bFinish, $keyGen, @_ );
 	my $thresh = [];
-	my $links = [];
+	my $links  = [];
 
 	my ( $i, $ai, $j, $k );
-	for ( $i = $aStart; $i <= $aFinish; $i++ )
+	for ( $i = $aStart ; $i <= $aFinish ; $i++ )
 	{
-		$ai = &$keyGen( $a->[ $i ], @_ );
-		if ( exists( $bMatches->{ $ai } ) )
+		$ai = &$keyGen( $a->[$i], @_ );
+		if ( exists( $bMatches->{$ai} ) )
 		{
 			$k = 0;
-			for $j ( reverse( @{ $bMatches->{ $ai } } ) )
+			for $j ( @{ $bMatches->{$ai} } )
 			{
+
 				# optimization: most of the time this will be true
-				if ( $k
-					and $thresh->[ $k ] > $j
-					and $thresh->[ $k - 1 ] < $j )
+				if ( $k and $thresh->[$k] > $j and $thresh->[ $k - 1 ] < $j )
 				{
-					$thresh->[ $k ] = $j;
+					$thresh->[$k] = $j;
 				}
 				else
 				{
@@ -490,20 +600,20 @@ sub _longestCommonSubsequence
 				}
 
 				# oddly, it's faster to always test this (CPU cache?).
-				if ( defined( $k ) )
+				if ( defined($k) )
 				{
-					$links->[ $k ] = 
-						[ ( $k ? $links->[ $k - 1 ] : undef ), $i, $j ];
+					$links->[$k] =
+					  [ ( $k ? $links->[ $k - 1 ] : undef ), $i, $j ];
 				}
 			}
 		}
 	}
 
-	if ( @$thresh )
+	if (@$thresh)
 	{
-		for ( my $link = $links->[ $#$thresh ]; $link; $link = $link->[ 0 ] )
+		for ( my $link = $links->[$#$thresh] ; $link ; $link = $link->[0] )
 		{
-			$matchVector->[ $link->[ 1 ] ] = $link->[ 2 ];
+			$matchVector->[ $link->[1] ] = $link->[2];
 		}
 	}
 
@@ -512,68 +622,184 @@ sub _longestCommonSubsequence
 
 sub traverse_sequences
 {
-	my $a = shift;	# array ref
-	my $b = shift;	# array ref
-	my $callbacks = shift || { };
-	my $keyGen = shift;
-	my $matchCallback = $callbacks->{'MATCH'} || sub { };
-	my $discardACallback = $callbacks->{'DISCARD_A'} || sub { };
+	my $a                 = shift;                                  # array ref
+	my $b                 = shift;                                  # array ref
+	my $callbacks         = shift || {};
+	my $keyGen            = shift;
+	my $matchCallback     = $callbacks->{'MATCH'} || sub { };
+	my $discardACallback  = $callbacks->{'DISCARD_A'} || sub { };
 	my $finishedACallback = $callbacks->{'A_FINISHED'};
-	my $discardBCallback = $callbacks->{'DISCARD_B'} || sub { };
+	my $discardBCallback  = $callbacks->{'DISCARD_B'} || sub { };
 	my $finishedBCallback = $callbacks->{'B_FINISHED'};
 	my $matchVector = _longestCommonSubsequence( $a, $b, $keyGen, @_ );
-	# Process all the lines in match vector
+
+	# Process all the lines in @$matchVector
 	my $lastA = $#$a;
 	my $lastB = $#$b;
-	my $bi = 0;
+	my $bi    = 0;
 	my $ai;
 
-	for ( $ai = 0; $ai <= $#$matchVector; $ai++ )
+	for ( $ai = 0 ; $ai <= $#$matchVector ; $ai++ )
 	{
-		my $bLine = $matchVector->[ $ai ];
-		if ( defined( $bLine ) )	# matched
+		my $bLine = $matchVector->[$ai];
+		if ( defined($bLine) )    # matched
 		{
 			&$discardBCallback( $ai, $bi++, @_ ) while $bi < $bLine;
-			&$matchCallback( $ai, $bi++, @_ );
+			&$matchCallback( $ai,    $bi++, @_ );
 		}
 		else
 		{
 			&$discardACallback( $ai, $bi, @_ );
 		}
 	}
-	# the last entry (if any) processed was a match.
 
-	if ( defined( $finishedBCallback ) && $ai <= $lastA )
+	# The last entry (if any) processed was a match.
+	# $ai and $bi point just past the last matching lines in their sequences.
+
+	while ( $ai <= $lastA or $bi <= $lastB )
 	{
-		&$finishedBCallback( $bi, @_ );
-	}
-	else
-	{
-		&$discardACallback( $ai++, $bi, @_ ) while ( $ai <= $lastA );
+
+		# last A?
+		if ( $ai == $lastA + 1 and $bi <= $lastB )
+		{
+			if ( defined($finishedACallback) )
+			{
+				&$finishedACallback( $lastA, @_ );
+				$finishedACallback = undef;
+			}
+			else
+			{
+				&$discardBCallback( $ai, $bi++, @_ ) while $bi <= $lastB;
+			}
+		}
+
+		# last B?
+		if ( $bi == $lastB + 1 and $ai <= $lastA )
+		{
+			if ( defined($finishedBCallback) )
+			{
+				&$finishedBCallback( $lastB, @_ );
+				$finishedBCallback = undef;
+			}
+			else
+			{
+				&$discardACallback( $ai++, $bi, @_ ) while $ai <= $lastA;
+			}
+		}
+
+		&$discardACallback( $ai++, $bi, @_ ) if $ai <= $lastA;
+		&$discardBCallback( $ai, $bi++, @_ ) if $bi <= $lastB;
 	}
 
-	if ( defined( $finishedACallback ) && $bi <= $lastB )
+	return 1;
+}
+
+sub traverse_balanced
+{
+	my $a                 = shift;                                  # array ref
+	my $b                 = shift;                                  # array ref
+	my $callbacks         = shift || {};
+	my $keyGen            = shift;
+	my $matchCallback     = $callbacks->{'MATCH'} || sub { };
+	my $discardACallback  = $callbacks->{'DISCARD_A'} || sub { };
+	my $discardBCallback  = $callbacks->{'DISCARD_B'} || sub { };
+	my $changeCallback    = $callbacks->{'CHANGE'};
+	my $matchVector = _longestCommonSubsequence( $a, $b, $keyGen, @_ );
+
+	# Process all the lines in match vector
+	my $lastA = $#$a;
+	my $lastB = $#$b;
+	my $bi    = 0;
+	my $ai    = 0;
+	my $ma    = -1;
+	my $mb;
+
+	while (1)
 	{
-		&$finishedACallback( $ai, @_ );
+
+		# Find next match indices $ma and $mb
+		do { $ma++ } while ( $ma <= $#$matchVector && !defined $matchVector->[$ma] );
+
+		last if $ma > $#$matchVector;    # end of matchVector?
+		$mb = $matchVector->[$ma];
+
+		# Proceed with discard a/b or change events until
+		# next match
+		while ( $ai < $ma || $bi < $mb )
+		{
+
+			if ( $ai < $ma && $bi < $mb )
+			{
+
+				# Change
+				if ( defined $changeCallback )
+				{
+					&$changeCallback( $ai++, $bi++, @_ );
+				}
+				else
+				{
+					&$discardACallback( $ai++, $bi, @_ );
+					&$discardBCallback( $ai, $bi++, @_ );
+				}
+			}
+			elsif ( $ai < $ma )
+			{
+				&$discardACallback( $ai++, $bi, @_ );
+			}
+			else
+			{
+
+				# $bi < $mb
+				&$discardBCallback( $ai, $bi++, @_ );
+			}
+		}
+
+		# Match
+		&$matchCallback( $ai++, $bi++, @_ );
 	}
-	else
+
+	while ( $ai <= $lastA || $bi <= $lastB )
 	{
-		&$discardBCallback( $ai, $bi++, @_ ) while ( $bi <= $lastB );
+		if ( $ai <= $lastA && $bi <= $lastB )
+		{
+
+			# Change
+			if ( defined $changeCallback )
+			{
+				&$changeCallback( $ai++, $bi++, @_ );
+			}
+			else
+			{
+				&$discardACallback( $ai++, $bi, @_ );
+				&$discardBCallback( $ai, $bi++, @_ );
+			}
+		}
+		elsif ( $ai <= $lastA )
+		{
+			&$discardACallback( $ai++, $bi, @_ );
+		}
+		else
+		{
+
+			# $bi <= $lastB
+			&$discardBCallback( $ai, $bi++, @_ );
+		}
 	}
+
 	return 1;
 }
 
 sub LCS
 {
-	my $a = shift;	# array ref
+	my $a = shift;                                           # array ref
 	my $matchVector = _longestCommonSubsequence( $a, @_ );
 	my @retval;
 	my $i;
-	for ( $i = 0; $i <= $#$matchVector; $i++ )
+	for ( $i = 0 ; $i <= $#$matchVector ; $i++ )
 	{
-		if ( defined( $matchVector->[ $i ] ) )
+		if ( defined( $matchVector->[$i] ) )
 		{
-			push( @retval, $a->[ $i ] );
+			push ( @retval, $a->[$i] );
 		}
 	}
 	return wantarray ? @retval : \@retval;
@@ -581,17 +807,43 @@ sub LCS
 
 sub diff
 {
-	my $a = shift;	# array ref
-	my $b = shift;	# array ref
+	my $a      = shift;    # array ref
+	my $b      = shift;    # array ref
 	my $retval = [];
-	my $hunk = [];
-	my $discard = sub { push( @$hunk, [ '-', $_[ 0 ], $a->[ $_[ 0 ] ] ] ) };
-	my $add = sub { push( @$hunk, [ '+', $_[ 1 ], $b->[ $_[ 1 ] ] ] ) };
-	my $match = sub { push( @$retval, $hunk ) if scalar(@$hunk); $hunk = [] };
+	my $hunk   = [];
+	my $discard = sub { push ( @$hunk, [ '-', $_[0], $a->[ $_[0] ] ] ) };
+	my $add = sub { push ( @$hunk, [ '+', $_[1], $b->[ $_[1] ] ] ) };
+	my $match = sub { push ( @$retval, $hunk ) if scalar(@$hunk); $hunk = [] };
 	traverse_sequences( $a, $b,
-		{ MATCH => $match, DISCARD_A => $discard, DISCARD_B => $add },
-		@_ );
+		{ MATCH => $match, DISCARD_A => $discard, DISCARD_B => $add }, @_ );
 	&$match();
+	return wantarray ? @$retval : $retval;
+}
+
+sub sdiff
+{
+	my $a      = shift;    # array ref
+	my $b      = shift;    # array ref
+	my $retval = [];
+	my $discard = sub { push ( @$retval, [ '-', $a->[ $_[0] ], "" ] ) };
+	my $add = sub { push ( @$retval, [ '+', "", $b->[ $_[1] ] ] ) };
+	my $change = sub {
+		push ( @$retval, [ 'c', $a->[ $_[0] ], $b->[ $_[1] ] ] );
+	};
+	my $match = sub {
+		push ( @$retval, [ 'u', $a->[ $_[0] ], $b->[ $_[1] ] ] );
+	};
+	traverse_balanced(
+		$a,
+		$b,
+		{
+			MATCH     => $match,
+			DISCARD_A => $discard,
+			DISCARD_B => $add,
+			CHANGE    => $change,
+		},
+		@_
+	);
 	return wantarray ? @$retval : $retval;
 }
 
