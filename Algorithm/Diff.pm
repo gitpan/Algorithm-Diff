@@ -1,7 +1,7 @@
 # -*- perl -*-
 #
 # Longest Common Subsequence algorithm
-# Copyright 1998 M-J. Dominus. (mjd-perl-diff@plover.com)
+# Copyright 1998, 1999 M-J. Dominus. (mjd-perl-diff@plover.com)
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
@@ -15,12 +15,12 @@
 # this matrix and invokes callback functions on each traversed matrix
 # element.
 #
-# $Id: LCS.pm,v 1.7 1998/08/13 00:39:53 mjd Exp mjd $;
+# $Id: Diff.pm,v 1.8 1999/03/08 19:23:49 mjd Exp $;
 #
 
 package Algorithm::Diff;
 use strict;
-$Algorithm::Diff::VERSION = '0.56';
+$Algorithm::Diff::VERSION = '0.58';
 
 
 %Algorithm::Diff::EXPORT_OK = (LCS => 1,
@@ -124,7 +124,7 @@ sub traverse_sequences {
 
 sub LCS {
   my $lcs = [];
-  my ($a, $b);
+  my ($a, $b) = @_;
   my $functions = { MATCH => sub {push @$lcs, $a->[$_[0]]} };
   
   traverse_sequences($functions, @_);
@@ -160,9 +160,13 @@ sub usage {
 
 Algorithm::Diff - Compute `intelligent' differences between two files / lists
 
+=head1 VERSION
+
+This is C<Algorithm::Diff> version B<0.58>
+
 =head1 SYNOPSIS
 
-  use Algorithm::Diff qw(diff LCS trverse_sequences);
+  use Algorithm::Diff qw(diff LCS traverse_sequences);
 
   @lcs = LCS(\@seq1, \@seq2, $comparison_function);
 
@@ -177,14 +181,24 @@ Algorithm::Diff - Compute `intelligent' differences between two files / lists
 
 =head1 INTRODUCTION
 
-I once read an article written by the authors of C<diff>; they said
-that they hard worked very hard on the algorithm until they found the
-right one.
 
-I think what they ended up using (and I hope someone will correct me,
-because I am not very confident about this) was the `longest common
-subsequence' method.  in the LCS problem, you have two sequences of
-items:
+=over 4
+
+To quote McIlroy [the author of C<diff>], ``I had tried at least three
+completely different algorithms before the final one.  C<diff> is the
+qunitessential case of not settling for mere competency in a program
+but revising it until it was right.''
+
+---I<The Unix Programming Environment>, Brian W. Kernighan and Rob
+Pike, p. 200.
+
+=back
+
+=head1 DESCRIPTION 
+
+The method used by C<diff> is to solve the `longest common
+subsequence' (LCS) problem.  in the LCS problem, you have two
+sequences of items:
 
         a b c d f g h j q z
 
@@ -199,7 +213,12 @@ I<S> is
 
         a b c d f g j z
 
-From there it's only a small step to get diff-like output:
+(You can get it by deleting the C<h> and C<q> from the first sequence,
+or by deleting the C<e>, C<i>, and C<k r x y> from the second
+sequence.)
+
+From the longest common subsequence it's only a small step to get
+diff-like output:
 
         e   h i   k   q r x y 
         +   - +   +   - + + +
@@ -306,7 +325,7 @@ sequence A, and arrow B points to an element of the sequence B.
 Initially, the arrows point to the first elements of the respective
 sequences.  C<traverse_sequences> will advance the arrows through the
 sequences one element at a time, calling an appropriate user-specified
-callback function before each advance.  It willadvance the arrows in
+callback function before each advance.  It will advance the arrows in
 such a way that if there are equal elements C<$A[$i]> and C<$B[$j]>
 which are equal and which are part of the LCS, there will be some
 moment during the execution of C<traverse_sequences> when arrow A is
@@ -350,7 +369,7 @@ specified, it will be called with pairs of elements and is expected to
 return true if the elements are considered equal.  If not specified,
 or if C<undef>,  it defaults to C<eq>.
 
-Any additional arguments to C<travese_sequences> are passed to the
+Any additional arguments to C<traverse_sequences> are passed to the
 callback functions.
 
 For examples of how to use this, see the code.  the C<LCS> and C<diff>
@@ -366,7 +385,6 @@ mjd-perl-diff-request@plover.com.
 
 Mark-Jason Dominus, mjd-perl-diff@plover.com.  
 
-Visit my diff/LCS web page at http://www.plover.com/~mjd/perl/diff/.
-
-
+For news and updates, visit my diff/LCS web page at
+http://www.plover.com/~mjd/perl/diff/.
 
