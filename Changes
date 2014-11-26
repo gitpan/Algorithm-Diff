@@ -1,5 +1,14 @@
 Revision history for Perl module Algorithm::Diff.
 
+1.19_03 2014-11-25
+- Fix documentation typos (RT 84981)
+  contributed by dsteinbrunner
+- add -w and -i switches to diffnew.pl (RT 69945)
+  contributed by Brian.Eschner
+- Remove Algorithm::DiffOld from the index
+  The module is still distributed with Algorithm::Diff, but is not indexed on
+  CPAN because this is an ***UNAUTHORIZED*** release of Algorithm::DiffOld.
+
 1.19_02 2006-07-31
 - Fix typo in @EXPORT_OK (s/LCDidx/LCSidx/) (RT 8576)
 - Use 'printf' in example code, not 'sprintf' nor 'sprint' (RT 16067)
@@ -32,7 +41,7 @@ Revision history for Perl module Algorithm::Diff.
 - Changed version label string.
 - Put MJD's PPT diff version into this distribution as diffnew.pl
 
-1.04 Added documentation. 
+1.04 Added documentation.
 
 1.03 Working version
 
